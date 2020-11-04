@@ -8,28 +8,34 @@ class GLU(tf.keras.layers.Layer):
 
     def call(self, inputs):
         half = inputs.shape[1] // 2
-        return inputs[:, :half] * tf.keras.activations.sigmoid(inputs[:, half:])
+        return inputs[:, :half] * tf.keras.activations.sigmoid(
+            inputs[:, half:])
 
 
 class Transform(tf.keras.layers.Layer):
     """Transform block."""
-    def __init__(self, feature_dim, batch_momentum, virtual_batch_size, fc=None, **kwargs):
+    def __init__(self, feature_dim, batch_momentum, virtual_batch_size,
+                 fc=None, **kwargs):
         super().__init__(**kwargs)
         self.feature_dim = feature_dim
         self.batch_momentum = batch_momentum
         self.virtual_batch_size = virtual_batch_size
 
         self.fc = fc
-        self.bn = tf.keras.layers.BatchNormalization(momentum=self.batch_momentum, virtual_batch_size=self.virtual_batch_size)
+        self.bn = tf.keras.layers.BatchNormalization(
+            momentum=self.batch_momentum,
+            virtual_batch_size=self.virtual_batch_size)
         self.glu = GLU()
 
     def build(self, input_shape):
         if not self.fc:
-            self.fc = tf.keras.layers.Dense(self.feature_dim * 2, use_bias=False, input_shape=input_shape)
+            self.fc = tf.keras.layers.Dense(
+                self.feature_dim * 2, use_bias=False, input_shape=input_shape)
 
     def call(self, inputs, training=None):
         x = inputs
         x = self.fc(x)
+        # TODO: self.bn.virtual_batch_size = 1 if not training
         x = self.bn(x, training=training)
         x = self.glu(x)
         return x
