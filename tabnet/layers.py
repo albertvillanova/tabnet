@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import tensorflow_addons as tfa
 
 
 class GLU(tf.keras.layers.Layer):
@@ -94,6 +95,50 @@ class FeatureTransformer(tf.keras.layers.layer):
             'feature_dim': self.feature_dim,
             'batch_momentum': self.batch_momentum,
             'virtual_batch_size': self.virtual_batch_size,
+            'decision_step': self.decision_step,
+        }
+        base_config = super().get_config()
+        return {**base_config, **config}
+
+
+class AttentiveTransformer(tf.keras.layers.Layer):
+    """Attentive Transformer."""
+    def __init__(self, num_features, batch_momentum, decision_step,
+                 virtual_batch_size, complementary_aggregated_mask_values,
+                 **kwargs):
+        super.__init__(**kwargs)
+        self.num_features = num_features
+        self.batch_momentum = batch_momentum
+        self.virtual_batch_size = virtual_batch_size
+        # prior scale term: set at every decision step
+        self.complementary_aggregated_mask_values = complementary_aggregated_mask_values
+        self.decision_step = decision_step
+        self.bn = tf.keras.layers.BatchNormalization(
+            momentum=self.batch_momentum,
+            virtual_batch_size=self.virtual_batch_size)
+        self.sparsemax = tfa.layers.Sparsemax()
+
+    def build(self, input_shape):
+        self.fc = tf.keras.layers.Dense(
+            self.num_features, use_bias=False,
+            name=f'transform_coef_{self.decision_step}',
+            input_shape=input_shape)
+
+    def call(self, inputs, training=None):
+        x = inputs
+        x = self.fc(x)
+        # TODO: self.bn.virtual_batch_size = 1 if not training
+        x = self.bn(x, training=training)
+        x *= self.complementary_aggregated_mask_values
+        x = self.sparsemax(x)
+        return x
+
+    def get_config(self):
+        config = {
+            'num_features': self.num_features,
+            'batch_momentum': self.batch_momentum,
+            'virtual_batch_size': self.virtual_batch_size,
+            'complementary_aggregated_mask_values': self.complementary_aggregated_mask_values,
             'decision_step': self.decision_step,
         }
         base_config = super().get_config()
